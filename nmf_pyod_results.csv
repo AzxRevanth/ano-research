@@ -1,0 +1,16 @@
+features,algorithm,auc_roc,f1,precision,recall
+Behavior only,IForest,0.705,0.022,0.022,0.022
+Behavior only,COPOD,0.716,0.043,0.043,0.043
+Behavior only,ECOD,0.673,0.043,0.043,0.043
+Behavior only,HBOS,0.733,0.022,0.022,0.022
+Behavior only,LOF,0.647,0.098,0.098,0.098
+Behavior + Global NMF residual,IForest,0.711,0.022,0.022,0.022
+Behavior + Global NMF residual,COPOD,0.717,0.043,0.043,0.043
+Behavior + Global NMF residual,ECOD,0.673,0.043,0.043,0.043
+Behavior + Global NMF residual,HBOS,0.733,0.022,0.022,0.022
+Behavior + Global NMF residual,LOF,0.647,0.098,0.098,0.098
+Behavior + Context NMF residual,IForest,0.711,0.022,0.022,0.022
+Behavior + Context NMF residual,COPOD,0.717,0.043,0.043,0.043
+Behavior + Context NMF residual,ECOD,0.674,0.043,0.043,0.043
+Behavior + Context NMF residual,HBOS,0.733,0.022,0.022,0.022
+Behavior + Context NMF residual,LOF,0.647,0.098,0.098,0.098

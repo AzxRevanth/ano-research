@@ -1,0 +1,7 @@
+features,algorithm,auc_roc,f1,precision,recall
+Behavior only,AutoEncoder,0.723,0.011,0.011,0.011
+Behavior only,VAE,0.689,0.054,0.054,0.054
+Behavior + Global NMF residual,AutoEncoder,0.715,0.011,0.011,0.011
+Behavior + Global NMF residual,VAE,0.698,0.043,0.043,0.043
+Behavior + Context NMF residual,AutoEncoder,0.718,0.011,0.011,0.011
+Behavior + Context NMF residual,VAE,0.698,0.033,0.033,0.033
