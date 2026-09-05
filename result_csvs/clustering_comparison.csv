@@ -1,0 +1,6 @@
+experiment,n_clusters,mean_purity_tp,n_assigned,notes
+KMeans (k=12),12,0.5472,87/87,MTH-IDS Tier 3 baseline on W_reduced
+"MCL (t=0.7, i=2.0)",23,0.6038,87/87,Graph-based Markov clustering on W_reduced
+FP+KMeans (P_th=0.7),12,0.6667,35/87,"Tier 4 RF filter (removed 29 FPs, kept 30 TPs)"
+"FP+MCL (P_th=0.7, t=0.7, i=2.0)",14,0.7,35/87,"RF filter + Graph MCL (removed 29 FPs, kept 30 TPs)"
+Raw Features (KMeans k=12 (Raw Features)),12,0.6038,87/87,Direct on 830 raw features vs W_reduced

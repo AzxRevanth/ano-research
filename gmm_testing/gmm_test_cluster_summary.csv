@@ -1,0 +1,13 @@
+cluster,size,dominant_type,dominant_count,purity
+0,4,sustained_overload,1,0.25
+1,9,appliance_unusual_hours,6,0.6666666666666666
+2,18,stuck_appliance_on,6,0.3333333333333333
+3,14,impossible_appliance_combo,2,0.14285714285714285
+4,17,high_usage_low_occupancy,5,0.29411764705882354
+5,8,stuck_appliance_on,3,0.375
+6,3,gradual_drift_increase,1,0.3333333333333333
+7,1,appliance_unusual_hours,1,1.0
+8,12,heating_on_warm_day,5,0.4166666666666667
+9,2,stuck_appliance_off,2,1.0
+10,16,weekday_pattern_on_weekend,7,0.4375
+11,10,stuck_appliance_off,7,0.7
