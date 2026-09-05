@@ -9,7 +9,29 @@ The framework addresses two core operational requirements:
 2. **Stage 2 (Filtering & Diagnosis):** Semi-supervised post-detection filtering and graph-based community detection inspired by **MTH-IDS Tier 4 (Biased Classification)** and **Tier 3 (Cluster Labeling)** to purge false positives and categorize flagged alarms into diagnosed anomaly families.
 
 ```
-Raw Smart Meter Timeseries (830 Features)
+                                final_system_1.py
+                                       │
+   ┌───────────────────────────────────┼───────────────────────────────────┐
+   ▼                                   ▼                                   ▼
+PART 1: TSFresh Feature        PART 2: Stage 1 Novelty          PART 3: Stage 2 Spearman
+Engineering & Dataset Creation   NMF Anomaly Detector             Graph MCL & Diagnosis
+(from tsfreshing.ipynb)          (from complete_system_2.py)      (from complete_system_2.py)
+- Timestamp alignment &          - 70/15/15 Stratified Split      - MTH-IDS Tier 4 RF Filter
+  Vancouver timezone normalization - MinMaxScaler (Normal Only)      (P >= 0.70 confidence gate)
+- Weather regime mapping         - Unregularized NMF (K=40)       - L2-Norm + 10-D PCA Compression
+- Synthetic anomaly injections   - Inverse Normal Train MSE       - Spearman Rank Correlation Matrix
+  (14 distinct anomaly patterns)   Feature-Precision Weighting    - Weak Edge Pruning (t = 0.80)
+- Sliding window roll (15-min)   - RGAnomaly Combined Scoring     - Markov Clustering (MCL, inf = 1.5)
+- TSFresh extraction & impute      (alpha = 0.4)                  - MTH-IDS Tier 3 Cluster Labeling
+- FRESH hypothesis pruning       - Validation Threshold Tuning      by majority ground-truth vote
+- Cyclic context vector merge      (maximizing F1)                - Transparent Micro / Macro Purity
+- Saves / loads parquet & CSV    - Untouched Test Set Evaluation    and N >= 3 Cluster Audit Table
+  pipeline caches automatically                                   - Full Cross-Tabulation Matrix
+
+```
+
+```
+TS-FRESH pruned Smart Meter Timeseries (830 Features)
                   │
                   ▼
 ┌────────────────────────────────────────────────────────┐
