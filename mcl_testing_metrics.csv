@@ -1,0 +1,5 @@
+Metric,TP_Only (N=30),All_Surviving (N=35),Theoretical Range,Interpretation
+Homogeneity Score,0.9361,0.9124,"[0.0, 1.0]",1.0 = Each cluster contains only members of a single class
+Adjusted Rand Index (ARI),0.2568,0.2300,"[-1.0, 1.0]",Measures pairwise agreement adjusted for chance (0 = random)
+Normalized Mutual Info (NMI),0.7855,0.7723,"[0.0, 1.0]",Normalized mutual information between clusterings
+Fowlkes-Mallows Index (FMI),0.3565,0.3149,"[0.0, 1.0]",Geometric mean of pairwise precision and recall
