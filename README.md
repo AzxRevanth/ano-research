@@ -1,4 +1,4 @@
-# Executive Summary: End-to-End Smart Meter Anomaly Detection & Diagnostic Framework
+# AnoResearch: End-to-End Smart Meter Anomaly Detection & Diagnostic Framework
 
 ## 1. System Overview & Architecture
 
@@ -103,7 +103,7 @@ In standard NMF, every feature contributes equally to reconstruction error, allo
 
 ## 3. Stage 2: False Positive Filtering & Graph Clustering
 
-### The Filtering Stage (MTH-IDS Tier 4)
+### The Filtering Stage
 NMF produces 87 alarms on the test set, consisting of 53 True Positives and 34 False Positives. A Random Forest biased classifier trained on validation alarms acts as a confidence filter ($P \ge 0.70$):
 - **False Positives Eliminated:** **29 out of 34** (85.3% noise reduction).
 - **High-Confidence True Positives Retained:** **30 out of 53** (56.6% retention of clean anomaly signals).
