@@ -59,7 +59,6 @@ CONFIG = {
     
     # Stage 2: Representation, FP Filter & MCL Clustering
     "pca_dims": 10,
-    "similarity_metric": "spearman", # Options: 'spearman', 'cosine', 'pearson', 'rbf', 'manhattan'
     "rf_conf_threshold": 0.70, # Keep alarms with P(true anomaly) >= 0.70
     "rf_n_estimators": 100,
     "mcl_sim_threshold": 0.70, # Cosine similarity threshold for pruning edges
@@ -240,11 +239,11 @@ def train_weighted_nmf(data, cfg):
 # ==============================================================================
 def run_fp_filter_and_mcl(nmf_data, cfg):
     """
-    Applies Random Forest FP Filter (MTH-IDS Tier 4), then performs Graph MCL,
-    and assigns dominant anomaly labels (MTH-IDS Tier 3).
+    Applies Random Forest FP Filter, then performs Graph MCL,
+    and assigns dominant anomaly labels.
     """
     print("\n" + "=" * 80)
-    print("STAGE 2: BIASED FP FILTERING (TIER 4) + GRAPH MCL + CLUSTER LABELING (TIER 3)")
+    print("STAGE 2: BIASED FP FILTERING + GRAPH MCL + CLUSTER LABELING")
     print("=" * 80)
     
     W_val_flagged = nmf_data["W_val_flagged"]
@@ -281,27 +280,8 @@ def run_fp_filter_and_mcl(nmf_data, cfg):
     pca = PCA(n_components=min(cfg["pca_dims"], len(W_survivors) - 1), random_state=cfg["random_state"])
     W_reduced = pca.fit_transform(W_norm)
     
-    # 3. Build Similarity Graph and Prune Weak Edges
-    sim_type = cfg.get("similarity_metric", "spearman").lower()
-    if sim_type == "spearman":
-        from scipy.stats import spearmanr
-        sim_matrix, _ = spearmanr(W_reduced, axis=1)
-    elif sim_type == "pearson":
-        sim_matrix = np.corrcoef(W_reduced)
-    elif sim_type == "rbf":
-        from sklearn.metrics.pairwise import euclidean_distances
-        dists = euclidean_distances(W_reduced)
-        gamma = 1.0 / (2.0 * (np.median(dists) ** 2) + 1e-6)
-        sim_matrix = np.exp(-gamma * (dists ** 2))
-    elif sim_type == "manhattan":
-        from scipy.spatial.distance import pdist, squareform
-        man_d = squareform(pdist(W_reduced, metric="cityblock"))
-        gamma_m = 1.0 / (np.median(man_d) + 1e-6)
-        sim_matrix = np.exp(-gamma_m * man_d)
-    else:  # default cosine
-        sim_matrix = cosine_similarity(W_reduced)
-        
-    sim_matrix = np.clip(sim_matrix, 0.0, 1.0)
+    # 3. Build Cosine Similarity Graph and Prune Weak Edges
+    sim_matrix = cosine_similarity(W_reduced)
     sim_matrix[sim_matrix < cfg["mcl_sim_threshold"]] = 0.0
     np.fill_diagonal(sim_matrix, 1.0)
     

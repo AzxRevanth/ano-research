@@ -1,171 +1,180 @@
-# AnoResearch: End-to-End Smart Meter Anomaly Detection & Diagnostic Framework
+# AnoResearch
 
-## 1. System Overview & Architecture
+**End-to-end smart meter anomaly detection and diagnosis on the AMPds2 dataset.**
 
-This project delivers an end-to-end, two-stage machine learning framework for smart meter anomaly detection and diagnosis using the **AMPds2** dataset (5,856 15-minute observation windows across 830 features and 14 labeled anomaly types).
+AnoResearch is a two-stage machine learning framework. Stage 1 flags anomalous 15-minute windows with an unsupervised NMF novelty detector. Stage 2 removes likely false alarms and groups the remaining alarms into diagnosed anomaly families using graph clustering.
 
-The framework addresses two core operational requirements:
-1. **Stage 1 (Detection):** Unsupervised novelty detection to flag anomalous behavior windows while minimizing false alarms and maximizing **PR-AUC**.
-2. **Stage 2 (Filtering & Diagnosis):** Semi-supervised post-detection filtering and graph-based community detection inspired by **MTH-IDS Tier 4 (Biased Classification)** and **Tier 3 (Cluster Labeling)** to purge false positives and categorize flagged alarms into diagnosed anomaly families.
+- **Data:** AMPds2, 5,856 observation windows, 830 features, 14 labeled anomaly types
+- **Stage 1 goal:** detect anomalies while minimizing false alarms and maximizing PR-AUC
+- **Stage 2 goal:** filter false positives and diagnose alarms, inspired by MTH-IDS Tier 4 (Biased Classification) and Tier 3 (Cluster Labeling)
 
-```
-                                final_system_1.py
-                                       │
-   ┌───────────────────────────────────┼───────────────────────────────────┐
-   ▼                                   ▼                                   ▼
-PART 1: TSFresh Feature        PART 2: Stage 1 Novelty          PART 3: Stage 2 Spearman
-Engineering & Dataset Creation   NMF Anomaly Detector             Graph MCL & Diagnosis
-(from tsfreshing.ipynb)          (from complete_system_2.py)      (from complete_system_2.py)
-- Timestamp alignment &          - 70/15/15 Stratified Split      - MTH-IDS Tier 4 RF Filter
-  Vancouver timezone normalization - MinMaxScaler (Normal Only)      (P >= 0.70 confidence gate)
-- Weather regime mapping         - Unregularized NMF (K=40)       - L2-Norm + 10-D PCA Compression
-- Synthetic anomaly injections   - Inverse Normal Train MSE       - Spearman Rank Correlation Matrix
-  (14 distinct anomaly patterns)   Feature-Precision Weighting    - Weak Edge Pruning (t = 0.80)
-- Sliding window roll (15-min)   - RGAnomaly Combined Scoring     - Markov Clustering (MCL, inf = 1.5)
-- TSFresh extraction & impute      (alpha = 0.4)                  - MTH-IDS Tier 3 Cluster Labeling
-- FRESH hypothesis pruning       - Validation Threshold Tuning      by majority ground-truth vote
-- Cyclic context vector merge      (maximizing F1)                - Transparent Micro / Macro Purity
-- Saves / loads parquet & CSV    - Untouched Test Set Evaluation    and N >= 3 Cluster Audit Table
-  pipeline caches automatically                                   - Full Cross-Tabulation Matrix
+## Results at a Glance
 
+| Stage | Result |
+| :--- | :--- |
+| **Stage 1: Detection** (test set) | PR-AUC **0.4947**, ROC-AUC 0.7981, precision 60.92%, recall 46.49%, F1 0.5274 |
+| **Stage 1 vs. baseline** | PR-AUC +20.3% relative (0.4113 → 0.4947); false alarms −37% (54 → 34) |
+| **Stage 2A: False-positive filter** | 29 of 34 false alarms removed (85.3%); 30 of 53 true positives retained (56.6%) |
+| **Stage 2B: Graph clustering** | 93.33% size-weighted TP purity; 75.00% purity on clusters with N ≥ 3 |
+
+## Quick Start
+
+```bash
+python complete_system_2.py
 ```
 
+This runs the full pipeline (Stage 1 and Stage 2). See [Repository Contents](#repository-contents) for the other scripts.
+
+## Pipeline Overview
+
 ```
-TS-FRESH pruned Smart Meter Timeseries (830 Features)
+TSFresh-pruned smart meter time series (830 features)
                   │
                   ▼
 ┌────────────────────────────────────────────────────────┐
-│ STAGE 1: NMF NOVELTY DETECTION WITH INVERSE MSE WEIGHTS │
-│ - 70/15/15 Stratified Split (Novelty Framing)          │
-│ - Unregularized NMF (K=40) Fitted on Normal Data Only  │
-│ - Inverse Normal Train MSE Feature Weighting           │
-│ - RGAnomaly Score: 0.4*Input_Error + 0.6*Latent_Error  │
-│ - Threshold Selected on Validation Max F1 (th=0.1666)  │
+│ STAGE 1: NMF NOVELTY DETECTION                         │
+│  • 70/15/15 stratified split (novelty framing)         │
+│  • Unregularized NMF (K=40), fit on normal data only   │
+│  • Inverse normal-train MSE feature weighting          │
+│  • RGAnomaly score = 0.4·Input_Error + 0.6·Latent_Error│
+│  • Threshold chosen on validation max F1 (0.1666)      │
 └─────────────────────────┬──────────────────────────────┘
-                          │ 87 Alarms Flagged
-                          │ (53 True Positives, 34 False Positives)
+                          │ 87 alarms (53 TP, 34 FP)
                           ▼
 ┌────────────────────────────────────────────────────────┐
-│ STAGE 2A: TIER 4 BIASED CLASSIFIER FALSE POSITIVE FILTER│
-│ - Random Forest Trained on Validation Flagged Samples  │
-│ - Confidence Gate: Keep Alarms with P(True Anom) >= 0.70│
-│ - Eliminates 29 of 34 False Alarms (85.3% Noise Purged)│
+│ STAGE 2A: TIER 4 BIASED-CLASSIFIER FP FILTER           │
+│  • Random Forest trained on validation alarms          │
+│  • Keep alarms with P(true anomaly) ≥ 0.70             │
 └─────────────────────────┬──────────────────────────────┘
-                          │ 35 High-Confidence Alarms
-                          │ (30 True Positives, 5 False Positives)
+                          │ 35 alarms (30 TP, 5 FP)
                           ▼
 ┌────────────────────────────────────────────────────────┐
-│ STAGE 2B: SPEARMAN GRAPH MARKOV CLUSTERING & LABELING  │
-│ - L2 Normalization + 10-D PCA Compression              │
-│ - Spearman Rank Correlation Adjacency Matrix           │
-│ - Edge Pruning: Zero Out Weak Correlations (< 0.80)    │
-│ - Markov Clustering (MCL, Inflation = 1.5)             │
-│ - Tier 3 Dominant Label Assignment by Majority Vote    │
+│ STAGE 2B: SPEARMAN GRAPH + MARKOV CLUSTERING           │
+│  • L2 normalization + 10-D PCA compression             │
+│  • Spearman rank-correlation adjacency matrix          │
+│  • Edge pruning: zero out correlations < 0.80          │
+│  • Markov Clustering (MCL, inflation = 1.5)            │
+│  • Tier 3 labeling by majority ground-truth vote       │
 └─────────────────────────┬──────────────────────────────┘
-                          │
                           ▼
-             FINAL DIAGNOSED ANOMALY GROUPS
-         Size-Weighted TP Purity: 93.33%
-         Purity on Clusters (N >= 3): 75.00%
+              DIAGNOSED ANOMALY GROUPS
 ```
 
----
+### Code Structure
 
-## 2. Stage 1: Anomaly Detection Performance & Comparison
+The full pipeline is organized into three parts, as in `final_system_1.py`:
 
-### The Core Breakthrough: Inverse Normal Training MSE Weighting
-In standard NMF, every feature contributes equally to reconstruction error, allowing unpredictable contextual jitter to trigger false alarms. By computing each feature's mean squared reconstruction error strictly on normal training data ($\text{MSE}_j$) and weighting reconstruction by $w_j = \frac{1}{\text{MSE}_j + \epsilon}$:
-- Features that NMF models with high confidence on normal days are strongly prioritized.
-- Naturally noisy background features are downweighted.
+| Part | Source | What it does |
+| :--- | :--- | :--- |
+| **1. Feature engineering and dataset creation** | `tsfreshing.ipynb` | Timestamp alignment and Vancouver timezone normalization; weather regime mapping; injection of 14 synthetic anomaly patterns; 15-minute sliding window roll; TSFresh extraction and imputation; FRESH hypothesis pruning; cyclic context vector merge. Parquet and CSV caches are saved and loaded automatically. |
+| **2. Stage 1 detector** | `complete_system_2.py` | 70/15/15 stratified split; MinMaxScaler fit on normal data only; unregularized NMF (K=40); inverse normal-train MSE weighting; RGAnomaly combined scoring (α = 0.4); validation threshold tuning for max F1; untouched test-set evaluation. |
+| **3. Stage 2 filter and diagnosis** | `complete_system_2.py` | Tier 4 Random Forest filter (P ≥ 0.70); L2 norm and 10-D PCA; Spearman correlation matrix; edge pruning (t = 0.80); MCL (inflation = 1.5); Tier 3 cluster labeling; micro and macro purity reporting; N ≥ 3 cluster audit table; full cross-tabulation. |
 
-### Comparative Benchmark (Stage 1)
+## Stage 1: Anomaly Detection
 
-| Model / Approach | Configuration | Val PR-AUC | Val ROC-AUC | Test PR-AUC | Test ROC-AUC | Test Precision | Test Recall | Test F1 | Test Confusion (TP / FP / FN / TN) |
+### Key idea: inverse normal-train MSE weighting
+
+In standard NMF every feature contributes equally to reconstruction error, so unpredictable contextual jitter can trigger false alarms. Here, each feature's mean squared reconstruction error is computed on normal training data only (MSE<sub>j</sub>), and reconstruction error is weighted by
+
+```
+w_j = 1 / (MSE_j + ε)
+```
+
+Features that NMF reconstructs well on normal days are prioritized, and naturally noisy features are downweighted.
+
+### Benchmark
+
+| Model / approach | Configuration | Val PR-AUC | Val ROC-AUC | Test PR-AUC | Test ROC-AUC | Test precision | Test recall | Test F1 | Test TP / FP / FN / TN |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Initial Baseline** | $K=40$, Unregularized, RGAnomaly ($\alpha=0.4$) | 0.4004 | 0.7897 | 0.4113 | 0.7728 | 48.08% | 43.86% | 0.4587 | 50 / 54 / 64 / 711 |
-| **Best Regularized NMF** | $K=40$, `alpha_W=0, alpha_H=0` (Shrinkage hurt) | 0.4004 | 0.7897 | 0.4113 | 0.7728 | 48.08% | 43.86% | 0.4587 | 50 / 54 / 64 / 711 |
-| **Weighted Recon ($1/\text{Var}$)** | Baseline NMF + $1/\text{Var}$ Scoring | 0.3846 | 0.7762 | 0.3986 | 0.7570 | 54.67% | 35.96% | 0.4339 | 41 / 34 / 73 / 731 |
-| **Weighted Recon ($1/\text{Std}$)** | Baseline NMF + $1/\text{Std}$ Scoring | 0.4091 | 0.7912 | 0.4121 | 0.7716 | 54.05% | 35.09% | 0.4255 | 40 / 34 / 74 / 731 |
-| **Objective Weighted NMF** | Column-Scaled Matrix ($1/\text{Var}$ Pre-scaled) | 0.3960 | 0.7606 | 0.3848 | 0.7288 | 47.57% | 42.98% | 0.4516 | 49 / 54 / 65 / 711 |
-| **Best Stage 1 Model (Winner)** | Baseline NMF + $1/\text{TrainMSE}_{\text{normal}}$ Recon (RGAnomaly) | **0.4634** | **0.7874** | **0.4947** | **0.7981** | **60.92%** | **46.49%** | **0.5274** | **53 / 34 / 61 / 731** |
+| Initial baseline | K=40, unregularized, RGAnomaly (α=0.4) | 0.4004 | 0.7897 | 0.4113 | 0.7728 | 48.08% | 43.86% | 0.4587 | 50 / 54 / 64 / 711 |
+| Best regularized NMF | K=40, `alpha_W=0`, `alpha_H=0` (shrinkage hurt) | 0.4004 | 0.7897 | 0.4113 | 0.7728 | 48.08% | 43.86% | 0.4587 | 50 / 54 / 64 / 711 |
+| Weighted recon (1/Var) | Baseline NMF + 1/Var scoring | 0.3846 | 0.7762 | 0.3986 | 0.7570 | 54.67% | 35.96% | 0.4339 | 41 / 34 / 73 / 731 |
+| Weighted recon (1/Std) | Baseline NMF + 1/Std scoring | 0.4091 | 0.7912 | 0.4121 | 0.7716 | 54.05% | 35.09% | 0.4255 | 40 / 34 / 74 / 731 |
+| Objective weighted NMF | Column-scaled matrix (1/Var pre-scaled) | 0.3960 | 0.7606 | 0.3848 | 0.7288 | 47.57% | 42.98% | 0.4516 | 49 / 54 / 65 / 711 |
+| **Winner** | **Baseline NMF + 1/TrainMSE<sub>normal</sub> recon (RGAnomaly)** | **0.4634** | 0.7874 | **0.4947** | **0.7981** | **60.92%** | **46.49%** | **0.5274** | **53 / 34 / 61 / 731** |
 
-### Key Stage 1 Milestones
-- **+20.3% Relative Gain in PR-AUC:** Jumped from **0.4113 to 0.4947**.
-- **+12.8% Percentage Points in Precision:** Increased from **48.08% to 60.92%**.
-- **37% Reduction in False Alarms:** Test false positives dropped from **54 to 34**.
-- **Significant Gains on Difficult Anomalies:**
-  - `High Usage Low Occupancy`: Test ROC-AUC rose from **0.5499 to 0.8362** (+0.2863).
-  - `Power Spike`: Test ROC-AUC rose from **0.7454 to 0.9103** (+0.1649).
-  - `Sustained Overload`: Test ROC-AUC rose from **0.8564 to 0.9822** (+0.1258).
-  - `Gradual Drift Increase`: Test ROC-AUC rose from **0.4678 to 0.5913** (+0.1235).
+### Gains over the initial baseline
 
----
+- **PR-AUC:** 0.4113 → 0.4947 (+20.3% relative)
+- **Precision:** 48.08% → 60.92% (+12.8 percentage points)
+- **False alarms:** 54 → 34 on the test set (−37%)
 
-## 3. Stage 2: False Positive Filtering & Graph Clustering
+Per-anomaly test ROC-AUC improvements on the hardest anomaly types:
 
-### The Filtering Stage
-NMF produces 87 alarms on the test set, consisting of 53 True Positives and 34 False Positives. A Random Forest biased classifier trained on validation alarms acts as a confidence filter ($P \ge 0.70$):
-- **False Positives Eliminated:** **29 out of 34** (85.3% noise reduction).
-- **High-Confidence True Positives Retained:** **30 out of 53** (56.6% retention of clean anomaly signals).
-- **Surviving Alarms for Clustering:** **35 windows** (30 TP, 5 FP).
+| Anomaly type | Before | After | Change |
+| :--- | :---: | :---: | :---: |
+| `high_usage_low_occupancy` | 0.5499 | 0.8362 | +0.2863 |
+| `power_spike` | 0.7454 | 0.9103 | +0.1649 |
+| `sustained_overload` | 0.8564 | 0.9822 | +0.1258 |
+| `gradual_drift_increase` | 0.4678 | 0.5913 | +0.1235 |
 
-### Similarity Metric Benchmark for Graph MCL
+## Stage 2: False-Positive Filtering and Graph Clustering
 
-To construct the graph adjacency matrix for Markov Clustering (MCL), 5 similarity metrics were evaluated across the latent representations ($W_{\text{reduced}}$). Both macro-averages and size-weighted micro-purities were audited:
+### Stage 2A: Confidence filter
 
-| Similarity Metric | Threshold ($t$) | Inflation ($i$) | Clusters ($K$) | Singletons ($N=1$) | Clusters ($N \ge 3$) | **Size-Weighted TP Purity** | **Purity on Clusters ($N \ge 3$)** |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Spearman Rank Correlation (Winner)** | **0.80** | **1.5** | **26** | **23** | **2 / 26** | **`93.33%`** | **`75.00%`** |
-| **Manhattan Laplacian Kernel** | 0.80 | 1.5 | 23 | 21 | 1 / 23 | **90.00%** | **70.00%** |
-| **Cosine Similarity (Baseline)** | 0.80 | 1.5 | 17 | 12 | 2 / 17 | **80.00%** | **66.67%** |
-| **Pearson Correlation** | 0.80 | 1.5 | 16 | 12 | 2 / 16 | **76.67%** | **62.50%** |
-| **RBF / Gaussian Kernel** | 0.80 | 1.5 | 10 | 6 | 3 / 10 | **63.33%** | **54.17%** |
+Stage 1 produces 87 test-set alarms: 53 true positives and 34 false positives. A Random Forest trained on the validation alarms acts as a confidence gate (P ≥ 0.70):
 
-In the balanced clustering regime on all 87 alarms ($5 \le K \le 20$):
-- **Spearman Rank Correlation** achieved **58.49% Size-Weighted Purity** and **56.00% Purity on $N \ge 3$ clusters** across 17 clusters with only 1 singleton, outperforming Cosine (49.06% weighted purity).
+| Metric | Value |
+| :--- | :--- |
+| False positives eliminated | 29 of 34 (85.3% noise reduction) |
+| True positives retained | 30 of 53 (56.6%) |
+| Alarms passed to clustering | 35 (30 TP, 5 FP) |
 
-### Why Spearman Correlation + Edge Pruning Outperforms Cosine
-1. **Invariance to Power Drift:** Spearman compares the *ordinal ranking* of latent components rather than raw scalar wattages, making it invariant to scaling differences between heavy and light appliances.
-2. **Edge Pruning ($t = 0.80$):** Zeroing out weak connections eliminates spurious cross-category graph edges, enabling MCL random walks to isolate tight, distinct anomaly communities without merging them into a single dense cluster.
+### Stage 2B: Choosing the similarity metric
 
----
+Five similarity metrics were compared for building the MCL adjacency matrix over the reduced latent representations (W<sub>reduced</sub>), all at threshold t = 0.80 and inflation i = 1.5. The table below is for the 35 filtered alarms.
 
-## 4. Final Diagnostic Breakdown (Stage 2 Output)
+| Similarity metric | Clusters (K) | Singletons | Clusters with N ≥ 3 | Size-weighted TP purity | Purity on N ≥ 3 clusters |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **Spearman rank correlation (winner)** | 26 | 23 | 2 / 26 | **93.33%** | **75.00%** |
+| Manhattan Laplacian kernel | 23 | 21 | 1 / 23 | 90.00% | 70.00% |
+| Cosine similarity (baseline) | 17 | 12 | 2 / 17 | 80.00% | 66.67% |
+| Pearson correlation | 16 | 12 | 2 / 16 | 76.67% | 62.50% |
+| RBF / Gaussian kernel | 10 | 6 | 3 / 10 | 63.33% | 54.17% |
 
-### Cluster Composition Audit (FP Filter + Spearman Graph MCL)
+On all 87 alarms in a balanced clustering regime (5 ≤ K ≤ 20), Spearman reached 58.49% size-weighted purity and 56.00% purity on N ≥ 3 clusters across 17 clusters with 1 singleton, versus 49.06% weighted purity for Cosine.
 
-| Cluster ID | Dominant Anomaly Label | Size ($N$) | TP Count | Dominant TP Hits | TP Purity | Cluster Status |
+**Why Spearman with edge pruning works better than Cosine**
+
+1. **Invariance to power drift.** Spearman compares the ordinal ranking of latent components rather than raw wattages, so it is robust to scale differences between heavy and light appliances.
+2. **Edge pruning (t = 0.80).** Zeroing weak connections removes spurious cross-category edges, letting MCL random walks isolate tight, distinct anomaly communities instead of merging them.
+
+## Final Diagnostic Breakdown
+
+### Cluster audit (FP filter + Spearman graph MCL)
+
+26 clusters were produced from the 35 filtered alarms. Two are non-trivial communities (N ≥ 3), one is a micro-cluster (N = 2), and the other 23 are singletons.
+
+| Cluster | Dominant label | Size | TP count | Dominant TP hits | TP purity | Status |
 | :---: | :--- | :---: | :---: | :---: | :---: | :--- |
-| **Cluster 7** | `stuck_appliance_off` | **6** | **6** | **5** | **83.3%** | **Non-Trivial Community ($N \ge 3$)** |
-| **Cluster 8** | `normal` (False Alarm) | **4** | **2** | **1** | **50.0%** | **Non-Trivial Community ($N \ge 3$)** |
-| **Cluster 18** | `stuck_appliance_off` | 2 | 2 | 2 | 100.0% | Micro-Cluster ($N=2$) |
-| **Cluster 0** | `weekend_pattern_on_weekday` | 1 | 1 | 1 | 100.0% | Discrete Instance ($N=1$) |
-| **Cluster 1** | `sustained_overload` | 1 | 1 | 1 | 100.0% | Discrete Instance ($N=1$) |
-| **Cluster 2** | `stuck_appliance_off` | 1 | 1 | 1 | 100.0% | Discrete Instance ($N=1$) |
-| **Cluster 4** | `sensor_glitch` | 1 | 1 | 1 | 100.0% | Discrete Instance ($N=1$) |
-| **Cluster 5** | `high_usage_low_occupancy` | 1 | 1 | 1 | 100.0% | Discrete Instance ($N=1$) |
-| **Cluster 6** | `sustained_overload` | 1 | 1 | 1 | 100.0% | Discrete Instance ($N=1$) |
-| **Cluster 9** | `weekday_pattern_on_weekend` | 1 | 1 | 1 | 100.0% | Discrete Instance ($N=1$) |
-| **Cluster 10** | `high_usage_low_occupancy` | 1 | 1 | 1 | 100.0% | Discrete Instance ($N=1$) |
-| **Cluster 11** | `sustained_overload` | 1 | 1 | 1 | 100.0% | Discrete Instance ($N=1$) |
-| **Cluster 12** | `power_spike` | 1 | 1 | 1 | 100.0% | Discrete Instance ($N=1$) |
-| **Cluster 13** | `stuck_appliance_on` | 1 | 1 | 1 | 100.0% | Discrete Instance ($N=1$) |
-| **Cluster 14** | `multiple_high_power_simultaneous` | 1 | 1 | 1 | 100.0% | Discrete Instance ($N=1$) |
-| **Cluster 16** | `weekday_pattern_on_weekend` | 1 | 1 | 1 | 100.0% | Discrete Instance ($N=1$) |
-| **Cluster 17** | `high_usage_low_occupancy` | 1 | 1 | 1 | 100.0% | Discrete Instance ($N=1$) |
-| **Cluster 20** | `weekend_pattern_on_weekday` | 1 | 1 | 1 | 100.0% | Discrete Instance ($N=1$) |
-| **Cluster 21** | `weekend_pattern_on_weekday` | 1 | 1 | 1 | 100.0% | Discrete Instance ($N=1$) |
-| **Cluster 22** | `weekend_pattern_on_weekday` | 1 | 1 | 1 | 100.0% | Discrete Instance ($N=1$) |
-| **Cluster 23** | `impossible_appliance_combo` | 1 | 1 | 1 | 100.0% | Discrete Instance ($N=1$) |
-| **Cluster 24** | `weekend_pattern_on_weekday` | 1 | 1 | 1 | 100.0% | Discrete Instance ($N=1$) |
-| **Cluster 25** | `sustained_overload` | 1 | 1 | 1 | 100.0% | Discrete Instance ($N=1$) |
-| **Cluster 3, 15, 19** | `normal` (False Alarms) | 3 | 0 | 0 | 0.0% | Purged False Positive Singletons |
+| 7 | `stuck_appliance_off` | 6 | 6 | 5 | 83.3% | Community (N ≥ 3) |
+| 8 | `normal` (false alarm) | 4 | 2 | 1 | 50.0% | Community (N ≥ 3) |
+| 18 | `stuck_appliance_off` | 2 | 2 | 2 | 100.0% | Micro-cluster (N = 2) |
 
-### Full Ground Truth vs. Cluster Diagnosis Crosstab Matrix
+**Singleton clusters (N = 1), all true positives with 100% purity (20 clusters)**
+
+| Dominant label | Clusters |
+| :--- | :--- |
+| `weekend_pattern_on_weekday` | 0, 20, 21, 22, 24 |
+| `sustained_overload` | 1, 6, 11, 25 |
+| `high_usage_low_occupancy` | 5, 10, 17 |
+| `weekday_pattern_on_weekend` | 9, 16 |
+| `stuck_appliance_off` | 2 |
+| `sensor_glitch` | 4 |
+| `power_spike` | 12 |
+| `stuck_appliance_on` | 13 |
+| `multiple_high_power_simultaneous` | 14 |
+| `impossible_appliance_combo` | 23 |
+
+**Purged false-positive singletons (3 clusters):** clusters 3, 15, and 19 are labeled `normal` and contain no true anomalies.
+
+### Ground truth vs. cluster diagnosis
+
+Rows are the true anomaly type; columns are the cluster's dominant label.
 
 ```text
 Cluster Dominant Label            high_usage_low_occupancy  impossible_appliance_combo  multiple_high_power_simultaneous  normal  power_spike  sensor_glitch  stuck_appliance_off  stuck_appliance_on  sustained_overload  weekday_pattern_on_weekend  weekend_pattern_on_weekday
-True Anomaly Type                                                                                                                                                                                                                                                                
+True Anomaly Type
 appliance_unusual_hours                                  0                           0                                 0       0            0              0                    1                   0                   0                           0                           0
 heating_on_warm_day                                      0                           0                                 0       1            0              0                    0                   0                   0                           0                           0
 high_usage_low_occupancy                                 3                           0                                 0       0            0              0                    0                   0                   0                           0                           0
@@ -181,16 +190,20 @@ weekday_pattern_on_weekend                               0                      
 weekend_pattern_on_weekday                               0                           0                                 0       0            0              0                    0                   0                   0                           0                           5
 ```
 
----
+## Notes on Interpreting the Results
 
-## 5. Artifact & Codebase Index
+- **Singletons inflate purity.** 23 of the 26 clusters are singletons, and a singleton is trivially pure. The N ≥ 3 purity (75.00%) and the balanced-regime results (K between 5 and 20) are the more conservative indicators.
+- **Cluster 8 labeling.** The reported 93.33% and 75.00% purities count one hit in cluster 8, whose dominant label is `normal`. In the crosstab, the only rows landing in the `normal` column are the 5 false positives, `heating_on_warm_day` (1), and `stuck_appliance_off` (1). Counting strictly by the crosstab diagonal gives 27 of 30 correct TPs (90.00%) and 5 of 8 on N ≥ 3 clusters (62.50%). Check which convention the code uses before quoting these numbers.
+- **Filter trade-off.** The confidence gate removes most false alarms but also discards 23 of 53 true positives (43.4%).
 
-| File / Artifact | Description |
+## Repository Contents
+
+| File | Description |
 | :--- | :--- |
-| **`complete_system_2.py`** | **The production-ready standalone pipeline** implementing Stage 1 (Inverse MSE NMF) and Stage 2 (Spearman Graph MCL + Cluster Labeling). Executable via `python complete_system_2.py`. |
-| **`complete_system_1.py`** | The baseline complete pipeline using Cosine Similarity MCL and Tier 4 FP Filtering. |
-| **`best_model_yet.py`** | Standalone script for Stage 1 (NMF Detection with Inverse MSE Weighting) only. |
-| **`similarity_experiments.py`** | Benchmark suite comparing Cosine, Spearman, Pearson, RBF, and Manhattan metrics. |
-| **`similarity_metrics_comparison.csv`** | Quantitative comparison table across all similarity metrics on both $N=87$ and $N=35$ sets. |
-| **`nmf_experiments_results.csv`** | Quantitative benchmark of all 10 regularization settings and 9 feature weighting variants. |
-| **`result.md`** | This executive summary document. |
+| `complete_system_2.py` | **Production pipeline.** Stage 1 (inverse-MSE NMF) and Stage 2 (Spearman graph MCL and cluster labeling). Run with `python complete_system_2.py`. |
+| `complete_system_1.py` | Baseline pipeline using Cosine Similarity MCL and Tier 4 FP filtering. |
+| `best_model_yet.py` | Standalone Stage 1 only (NMF detection with inverse-MSE weighting). |
+| `similarity_experiments.py` | Benchmark suite comparing Cosine, Spearman, Pearson, RBF, and Manhattan metrics. |
+| `similarity_metrics_comparison.csv` | Similarity metric comparison on both the N = 87 and N = 35 alarm sets. |
+| `nmf_experiments_results.csv` | Results for all 10 regularization settings and 9 feature-weighting variants. |
+| `result.md` | Original executive summary. |
